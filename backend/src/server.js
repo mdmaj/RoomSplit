@@ -1,4 +1,3 @@
-
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -15,12 +14,27 @@ import exportRoutes from "./routes/exportRoutes.js";
 
 const app = express();
 
+// Allowed frontend origins
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://room-split-rho.vercel.app",
+];
+
 // Middleware
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: (origin, callback) => {
+      // Allow requests without an Origin header (e.g. health checks)
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
-  })
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
 );
 
 app.use(express.json({ limit: "10kb" }));
@@ -35,16 +49,13 @@ app.get("/", (req, res) => {
   });
 });
 
-// Authentication routes
+// API routes
 app.use("/api/auth", authRoutes);
-// Group routes
 app.use("/api/groups", groupRoutes);
-// Expense routes
 app.use("/api/expenses", expenseRoutes);
-// Balance routes
 app.use("/api/balances", balanceRoutes);
-// Export routes
 app.use("/api/export", exportRoutes);
+
 // Handle unknown routes
 app.use((req, res) => {
   res.status(404).json({
@@ -56,6 +67,14 @@ app.use((req, res) => {
 // Global error handler
 app.use((err, req, res, next) => {
   console.error("Server Error:", err.message);
+
+  // Handle CORS errors
+  if (err.message.startsWith("CORS blocked for origin:")) {
+    return res.status(403).json({
+      success: false,
+      message: "Origin not allowed by CORS",
+    });
+  }
 
   res.status(err.status || 500).json({
     success: false,
