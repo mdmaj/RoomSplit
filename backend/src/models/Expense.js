@@ -48,24 +48,30 @@ const expenseSchema = new mongoose.Schema(
       required: true,
     },
 
-    participants: [
-      {
-        user: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
-        },
-        sharePaise: {
-          type: Number,
-          required: true,
-          min: 0,
-          validate: {
-            validator: Number.isSafeInteger,
-            message: "Share must be a whole number of paise.",
+    // Optional for new expenses.
+    // Existing expenses with participants and sharePaise
+    // will continue to work.
+    participants: {
+      type: [
+        {
+          user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+          },
+          sharePaise: {
+            type: Number,
+            required: true,
+            min: 0,
+            validate: {
+              validator: Number.isSafeInteger,
+              message: "Share must be a whole number of paise.",
+            },
           },
         },
-      },
-    ],
+      ],
+      default: [],
+    },
 
     date: {
       type: Date,

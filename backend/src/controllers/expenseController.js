@@ -1,20 +1,23 @@
-
 import mongoose from "mongoose";
 import Expense from "../models/Expense.js";
 import Group from "../models/Group.js";
 
+// Check whether a user belongs to the group.
 const isMember = (group, userId) =>
-  group.members.some(
-    (member) => member.user.toString() === userId.toString()
-  );
+  group.members.some((member) => {
+    const memberUserId = member.user?._id ?? member.user;
+    return memberUserId?.toString() === userId?.toString();
+  });
 
-// Add a new expense
+// Add a new expense.
 export const createExpense = async (req, res) => {
   try {
     const { title, amount, category, paidBy, participants, date, notes } =
       req.body;
+
     const { groupId } = req.params;
 
+    // Validate group ID.
     if (!mongoose.isValidObjectId(groupId)) {
       return res.status(400).json({
         success: false,
@@ -22,32 +25,80 @@ export const createExpense = async (req, res) => {
       });
     }
 
-    if (!title?.trim() || title.trim().length > 100) {
+    // Validate title.
+    if (
+      typeof title !== "string" ||
+      !title.trim() ||
+      title.trim().length > 100
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Title is required and must be under 100 characters.",
+        message: "Title is required and must not exceed 100 characters.",
       });
     }
 
+    // Validate amount in rupees, allowing at most 2 decimal places.
     if (
       typeof amount !== "number" ||
       !Number.isFinite(amount) ||
       amount <= 0 ||
-      !Number.isSafeInteger(Math.round(amount * 100))
+      !Number.isSafeInteger(Math.round(amount * 100)) ||
+      Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-7
     ) {
       return res.status(400).json({
         success: false,
-        message: "Amount must be a positive number in rupees.",
+        message: "Amount must be positive and have at most 2 decimal places.",
       });
     }
 
-    if (!Array.isArray(participants) || participants.length === 0) {
+    // Validate category.
+    const allowedCategories = [
+      "Rent",
+      "Groceries",
+      "Electricity",
+      "Internet",
+      "Food",
+      "Transport",
+      "Cleaning",
+      "Other",
+    ];
+
+    const expenseCategory = category?.trim() || "Other";
+
+    if (!allowedCategories.includes(expenseCategory)) {
       return res.status(400).json({
         success: false,
-        message: "Select at least one participant.",
+        message: "Please select a valid expense category.",
       });
     }
 
+    // Validate notes.
+    if (
+      notes !== undefined &&
+      notes !== null &&
+      (typeof notes !== "string" || notes.length > 500)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Notes must not exceed 500 characters.",
+      });
+    }
+
+    // Validate date.
+    let expenseDate = new Date();
+
+    if (date !== undefined && date !== null && date !== "") {
+      expenseDate = new Date(date);
+
+      if (Number.isNaN(expenseDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide a valid expense date.",
+        });
+      }
+    }
+
+    // Find group.
     const group = await Group.findById(groupId);
 
     if (!group) {
@@ -57,6 +108,7 @@ export const createExpense = async (req, res) => {
       });
     }
 
+    // Verify that the current user belongs to the group.
     if (!isMember(group, req.user._id)) {
       return res.status(403).json({
         success: false,
@@ -64,57 +116,83 @@ export const createExpense = async (req, res) => {
       });
     }
 
-    const payerId = paidBy || req.user._id.toString();
-
-    if (!isMember(group, payerId)) {
-      return res.status(400).json({
-        success: false,
-        message: "The payer must be a member of this group.",
-      });
-    }
-
     const memberIds = new Set(
-      group.members.map((member) => member.user.toString())
+      group.members.map((member) => {
+        const memberUserId = member.user?._id ?? member.user;
+        return memberUserId.toString();
+      }),
     );
 
-    const participantIds = participants.map((id) => String(id));
+    // Default payer is the logged-in user.
+    const payerId =
+      paidBy === undefined || paidBy === null || paidBy === ""
+        ? req.user._id.toString()
+        : String(paidBy);
 
-    if (
-      participantIds.some(
-        (id) => !mongoose.isValidObjectId(id) || !memberIds.has(id)
-      )
-    ) {
+    if (!mongoose.isValidObjectId(payerId) || !memberIds.has(payerId)) {
       return res.status(400).json({
         success: false,
-        message: "Every participant must be a member of this group.",
+        message: "The payer must be a valid member of this group.",
       });
     }
 
-    if (new Set(participantIds).size !== participantIds.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Duplicate participants are not allowed.",
-      });
+    // Participants are optional for new expenses.
+    // If supplied by an older client, preserve the existing split behavior.
+    let splitParticipants = [];
+
+    if (participants !== undefined && participants !== null) {
+      if (!Array.isArray(participants)) {
+        return res.status(400).json({
+          success: false,
+          message: "Participants must be an array.",
+        });
+      }
+
+      const participantIds = participants.map((id) => String(id));
+
+      if (
+        participantIds.some(
+          (id) => !mongoose.isValidObjectId(id) || !memberIds.has(id),
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Every participant must be a member of this group.",
+        });
+      }
+
+      if (new Set(participantIds).size !== participantIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Duplicate participants are not allowed.",
+        });
+      }
+
+      // Divide in paise to avoid floating-point money errors.
+      const amountPaise = Math.round(amount * 100);
+      const baseShare =
+        participantIds.length > 0
+          ? Math.floor(amountPaise / participantIds.length)
+          : 0;
+      const remainder =
+        participantIds.length > 0 ? amountPaise % participantIds.length : 0;
+
+      splitParticipants = participantIds.map((user, index) => ({
+        user,
+        sharePaise: baseShare + (index < remainder ? 1 : 0),
+      }));
     }
 
-    const amountPaise = Math.round(amount * 100);
-    const baseShare = Math.floor(amountPaise / participantIds.length);
-    const remainder = amountPaise % participantIds.length;
-
-    const splitParticipants = participantIds.map((user, index) => ({
-      user,
-      sharePaise: baseShare + (index < remainder ? 1 : 0),
-    }));
-
+    // Create expense. The full amount is attributed to the actual payer.
     const expense = await Expense.create({
       groupId,
       title: title.trim(),
-      amountPaise,
-      category: category || "Other",
+      amountPaise: Math.round(amount * 100),
+      category: expenseCategory,
       paidBy: payerId,
       participants: splitParticipants,
-      date: date ? new Date(date) : new Date(),
-      notes: notes || "",
+      date: expenseDate,
+      notes: notes?.trim() || "",
     });
 
     const populatedExpense = await Expense.findById(expense._id)
@@ -127,7 +205,7 @@ export const createExpense = async (req, res) => {
       expense: populatedExpense,
     });
   } catch (error) {
-    console.error("Create expense error:", error.message);
+    console.error("Create expense error:", error);
 
     return res.status(500).json({
       success: false,
@@ -136,7 +214,7 @@ export const createExpense = async (req, res) => {
   }
 };
 
-// Get all expenses for a group
+// Get all expenses for a group.
 export const getGroupExpenses = async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -175,7 +253,7 @@ export const getGroupExpenses = async (req, res) => {
       expenses,
     });
   } catch (error) {
-    console.error("Get expenses error:", error.message);
+    console.error("Get expenses error:", error);
 
     return res.status(500).json({
       success: false,
@@ -184,7 +262,7 @@ export const getGroupExpenses = async (req, res) => {
   }
 };
 
-// Get one expense
+// Get one expense.
 export const getExpenseById = async (req, res) => {
   try {
     const { expenseId } = req.params;
@@ -221,7 +299,7 @@ export const getExpenseById = async (req, res) => {
       expense,
     });
   } catch (error) {
-    console.error("Get expense error:", error.message);
+    console.error("Get expense error:", error);
 
     return res.status(500).json({
       success: false,
@@ -230,7 +308,7 @@ export const getExpenseById = async (req, res) => {
   }
 };
 
-// Delete an expense: payer or group creator only
+// Delete an expense: payer or group creator only.
 export const deleteExpense = async (req, res) => {
   try {
     const { expenseId } = req.params;
@@ -260,11 +338,9 @@ export const deleteExpense = async (req, res) => {
       });
     }
 
-    const isPayer =
-      expense.paidBy.toString() === req.user._id.toString();
+    const isPayer = expense.paidBy.toString() === req.user._id.toString();
 
-    const isCreator =
-      group.createdBy.toString() === req.user._id.toString();
+    const isCreator = group.createdBy.toString() === req.user._id.toString();
 
     if (!isPayer && !isCreator) {
       return res.status(403).json({
@@ -280,7 +356,7 @@ export const deleteExpense = async (req, res) => {
       message: "Expense deleted successfully.",
     });
   } catch (error) {
-    console.error("Delete expense error:", error.message);
+    console.error("Delete expense error:", error);
 
     return res.status(500).json({
       success: false,

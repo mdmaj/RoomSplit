@@ -41,6 +41,25 @@ app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+
+const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+app.use((req, res, next) => {
+  if (!unsafeMethods.has(req.method)) {
+    return next();
+  }
+
+  const origin = req.get("Origin");
+
+  if (!origin || !allowedOrigins.includes(origin)) {
+    return res.status(403).json({
+      success: false,
+      message: "Request origin not allowed.",
+    });
+  }
+
+  next();
+});
 // Health check
 app.get("/", (req, res) => {
   res.status(200).json({

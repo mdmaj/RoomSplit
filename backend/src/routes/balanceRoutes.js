@@ -1,4 +1,3 @@
-
 import express from "express";
 
 import { protect } from "../middleware/authMiddleware.js";
@@ -18,3 +17,6 @@ router.post("/groups/:groupId/settlements", createSettlement);
 router.get("/groups/:groupId/settlements", getGroupSettlements);
 
 export default router;
+
+
+ 

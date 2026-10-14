@@ -1,9 +1,7 @@
-
 import mongoose from "mongoose";
 import Group from "../models/Group.js";
 import Expense from "../models/Expense.js";
 import Settlement from "../models/Settlement.js";
-
 
 const isMember = (group, userId) =>
   group.members.some((member) => {
@@ -12,6 +10,53 @@ const isMember = (group, userId) =>
     return memberUserId?.toString() === userId?.toString();
   });
 
+const calculateGroupBalances = async (groupId, group) => {
+  const balances = new Map();
+
+  for (const member of group.members) {
+    const user = member.user?._id ?? member.user;
+
+    balances.set(user.toString(), {
+      userId: user,
+      name: member.user?.name ?? "Member",
+      totalPaidPaise: 0,
+      totalSharePaise: 0,
+    });
+  }
+
+  const expenses = await Expense.find({ groupId });
+
+  for (const expense of expenses) {
+    const payer = balances.get(expense.paidBy.toString());
+
+    if (payer) payer.totalPaidPaise += expense.amountPaise;
+
+    for (const participant of expense.participants) {
+      const balance = balances.get(participant.user.toString());
+
+      if (balance) balance.totalSharePaise += participant.sharePaise;
+    }
+  }
+
+  const settlements = await Settlement.find({
+    groupId,
+    status: "completed",
+  });
+
+  for (const settlement of settlements) {
+    const payer = balances.get(settlement.paidBy.toString());
+    const receiver = balances.get(settlement.paidTo.toString());
+
+    if (payer) payer.totalPaidPaise += settlement.amountPaise;
+    if (receiver) receiver.totalPaidPaise -= settlement.amountPaise;
+  }
+
+  return [...balances.values()].map((balance) => ({
+    ...balance,
+    netBalancePaise:
+      balance.totalPaidPaise - balance.totalSharePaise,
+  }));
+};
 export const getGroupBalances = async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -25,7 +70,7 @@ export const getGroupBalances = async (req, res) => {
 
     const group = await Group.findById(groupId).populate(
       "members.user",
-      "name email"
+      "name email",
     );
 
     if (!group) {
@@ -97,8 +142,7 @@ export const getGroupBalances = async (req, res) => {
 
     const balanceList = Array.from(balances.values()).map((balance) => ({
       ...balance,
-      netBalancePaise:
-        balance.totalPaidPaise - balance.totalSharePaise,
+      netBalancePaise: balance.totalPaidPaise - balance.totalSharePaise,
     }));
 
     // Positive = should receive; negative = owes money.
@@ -123,16 +167,13 @@ export const getGroupBalances = async (req, res) => {
     let creditorIndex = 0;
     let debtorIndex = 0;
 
-    while (
-      creditorIndex < creditors.length &&
-      debtorIndex < debtors.length
-    ) {
+    while (creditorIndex < creditors.length && debtorIndex < debtors.length) {
       const creditor = creditors[creditorIndex];
       const debtor = debtors[debtorIndex];
 
       const amountPaise = Math.min(
         creditor.remainingPaise,
-        debtor.remainingPaise
+        debtor.remainingPaise,
       );
 
       if (amountPaise > 0) {
@@ -171,11 +212,13 @@ export const getGroupBalances = async (req, res) => {
   }
 };
 
+
 export const createSettlement = async (req, res) => {
   try {
     const { groupId } = req.params;
     const { paidTo, amount, note } = req.body;
 
+    // Validate IDs
     if (!mongoose.isValidObjectId(groupId)) {
       return res.status(400).json({
         success: false,
@@ -190,11 +233,11 @@ export const createSettlement = async (req, res) => {
       });
     }
 
+    // Validate amount
     if (
       typeof amount !== "number" ||
       !Number.isFinite(amount) ||
-      amount <= 0 ||
-      !Number.isSafeInteger(Math.round(amount * 100))
+      amount <= 0
     ) {
       return res.status(400).json({
         success: false,
@@ -202,13 +245,31 @@ export const createSettlement = async (req, res) => {
       });
     }
 
-    if (note && (typeof note !== "string" || note.length > 300)) {
+    const amountPaise = Math.round(amount * 100);
+
+    if (
+      !Number.isSafeInteger(amountPaise) ||
+      Math.abs(amount * 100 - amountPaise) > 1e-7
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Amount must have at most 2 decimal places.",
+      });
+    }
+
+    // Validate note
+    if (
+      note !== undefined &&
+      note !== null &&
+      (typeof note !== "string" || note.trim().length > 300)
+    ) {
       return res.status(400).json({
         success: false,
         message: "Note must be a string of at most 300 characters.",
       });
     }
 
+    // Fetch group — this was missing in your code
     const group = await Group.findById(groupId);
 
     if (!group) {
@@ -239,12 +300,51 @@ export const createSettlement = async (req, res) => {
       });
     }
 
+    // Calculate current balances
+    const balances = await calculateGroupBalances(groupId, group);
+
+    const senderBalance = balances.find(
+      (balance) =>
+        balance.userId.toString() === req.user._id.toString()
+    );
+
+    const recipientBalance = balances.find(
+      (balance) => balance.userId.toString() === paidTo.toString()
+    );
+
+    if (
+      !senderBalance ||
+      !recipientBalance ||
+      senderBalance.netBalancePaise >= 0 ||
+      recipientBalance.netBalancePaise <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "No outstanding payment is due between these members.",
+      });
+    }
+
+    const outstandingPaise = Math.min(
+      -senderBalance.netBalancePaise,
+      recipientBalance.netBalancePaise
+    );
+
+    if (amountPaise > outstandingPaise) {
+      return res.status(400).json({
+        success: false,
+        message: `Settlement exceeds the outstanding amount of ₹${(
+          outstandingPaise / 100
+        ).toFixed(2)}.`,
+      });
+    }
+
+    // Create settlement
     const settlement = await Settlement.create({
       groupId,
       paidBy: req.user._id,
       paidTo,
-      amountPaise: Math.round(amount * 100),
-      note: note?.trim() || "",
+      amountPaise,
+      note: typeof note === "string" ? note.trim() : "",
       status: "completed",
     });
 
@@ -258,7 +358,7 @@ export const createSettlement = async (req, res) => {
       settlement: populatedSettlement,
     });
   } catch (error) {
-    console.error("Create settlement error:", error.message);
+    console.error("Create settlement error:", error);
 
     return res.status(500).json({
       success: false,
