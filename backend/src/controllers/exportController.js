@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 import ExcelJS from "exceljs";
 
@@ -6,18 +5,17 @@ import Group from "../models/Group.js";
 import Expense from "../models/Expense.js";
 import Settlement from "../models/Settlement.js";
 
+const getUserId = (user) => (user?._id ?? user)?.toString();
+
 const isMember = (group, userId) =>
-  group.members.some(
-    (member) =>
-      (member.user._id || member.user).toString() === userId.toString()
-  );
+  group.members.some((member) => getUserId(member.user) === getUserId(userId));
 
 const toRupees = (paise) => paise / 100;
 
 export const exportGroupExpenses = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const { month } = req.query; // Optional: YYYY-MM
+    const { month } = req.query;
 
     if (!mongoose.isValidObjectId(groupId)) {
       return res.status(400).json({
@@ -59,7 +57,7 @@ export const exportGroupExpenses = async (req, res) => {
     }
 
     const expenseFilter = { groupId };
-    const settlementFilter = { groupId };
+    const settlementFilter = { groupId, status: "completed" };
 
     if (startDate && endDate) {
       expenseFilter.date = { $gte: startDate, $lt: endDate };
@@ -84,7 +82,6 @@ export const exportGroupExpenses = async (req, res) => {
     ]);
 
     const workbook = new ExcelJS.Workbook();
-
     workbook.creator = "RoomSplit";
     workbook.created = new Date();
     workbook.subject = "Group expense report";
@@ -103,17 +100,73 @@ export const exportGroupExpenses = async (req, res) => {
     ];
 
     for (const expense of expenses) {
+      const participantNames = expense.participants
+        .map((participant) => participant.user?.name || "Unknown")
+        .join(", ");
+
       expenseSheet.addRow({
         date: expense.date,
         title: expense.title,
         category: expense.category,
         payer: expense.paidBy?.name || "Unknown",
-        participants: expense.participants
-          .map((p) => p.user?.name || "Unknown")
-          .join(", "),
+        participants: participantNames || "Equal split among group",
         amount: toRupees(expense.amountPaise),
         notes: expense.notes || "",
       });
+    }
+
+    // Build actual expense totals and fair shares.
+    // Settlements are intentionally excluded from these calculations.
+    const balances = new Map();
+
+    for (const member of populatedGroup.members) {
+      const user = member.user;
+      if (!user?._id) continue;
+
+      balances.set(user._id.toString(), {
+        name: user.name || "Roommate",
+        email: user.email || "",
+        paidPaise: 0,
+        sharePaise: 0,
+      });
+    }
+
+    for (const expense of expenses) {
+      const payerId = getUserId(expense.paidBy);
+      const payer = balances.get(payerId);
+
+      if (payer) {
+        payer.paidPaise += expense.amountPaise;
+      }
+
+      const participants = Array.isArray(expense.participants)
+        ? expense.participants
+        : [];
+
+      // Preserve shares saved on older expenses.
+      if (participants.length > 0) {
+        for (const participant of participants) {
+          const participantId = getUserId(participant.user);
+          const balance = balances.get(participantId);
+
+          if (balance) {
+            balance.sharePaise += participant.sharePaise || 0;
+          }
+        }
+      } else {
+        // New expenses without selected participants are split equally.
+        const memberIds = [...balances.keys()];
+
+        if (memberIds.length > 0) {
+          const baseShare = Math.floor(expense.amountPaise / memberIds.length);
+          const remainder = expense.amountPaise % memberIds.length;
+
+          memberIds.forEach((id, index) => {
+            const balance = balances.get(id);
+            balance.sharePaise += baseShare + (index < remainder ? 1 : 0);
+          });
+        }
+      }
     }
 
     // Sheet 2: Roommate summary
@@ -127,40 +180,6 @@ export const exportGroupExpenses = async (req, res) => {
       { header: "Net Balance (INR)", key: "net", width: 22 },
       { header: "Status", key: "status", width: 18 },
     ];
-
-    const balances = new Map();
-
-    for (const member of populatedGroup.members) {
-      const user = member.user;
-      balances.set(user._id.toString(), {
-        name: user.name,
-        email: user.email,
-        paidPaise: 0,
-        sharePaise: 0,
-      });
-    }
-
-    for (const expense of expenses) {
-      const payer = balances.get(expense.paidBy?._id.toString());
-
-      if (payer) payer.paidPaise += expense.amountPaise;
-
-      for (const participant of expense.participants) {
-        const balance = balances.get(
-          participant.user?._id.toString()
-        );
-
-        if (balance) balance.sharePaise += participant.sharePaise;
-      }
-    }
-
-    for (const settlement of settlements) {
-      const sender = balances.get(settlement.paidBy?._id.toString());
-      const receiver = balances.get(settlement.paidTo?._id.toString());
-
-      if (sender) sender.paidPaise += settlement.amountPaise;
-      if (receiver) receiver.paidPaise -= settlement.amountPaise;
-    }
 
     for (const balance of balances.values()) {
       const netPaise = balance.paidPaise - balance.sharePaise;
@@ -180,7 +199,7 @@ export const exportGroupExpenses = async (req, res) => {
       });
     }
 
-    // Sheet 3: Settlement history
+    // Sheet 3: Actual settlement history
     const settlementSheet = workbook.addWorksheet("Settlements");
 
     settlementSheet.columns = [
@@ -223,7 +242,6 @@ export const exportGroupExpenses = async (req, res) => {
 
       current.count += 1;
       current.totalPaise += expense.amountPaise;
-
       categoryTotals.set(category, current);
     }
 
@@ -235,30 +253,21 @@ export const exportGroupExpenses = async (req, res) => {
       });
     }
 
-    // Format headers and monetary columns
+    // Format all worksheets
     for (const sheet of workbook.worksheets) {
       sheet.getRow(1).font = { bold: true };
       sheet.getRow(1).alignment = { vertical: "middle" };
       sheet.views = [{ state: "frozen", ySplit: 1 }];
 
       sheet.getRow(1).eachCell((cell) => {
-        cell.border = {
-          bottom: { style: "thin" },
-        };
+        cell.border = { bottom: { style: "thin" } };
       });
-    }
 
-    for (const sheet of [
-      expenseSheet,
-      summarySheet,
-      settlementSheet,
-      categorySheet,
-    ]) {
       sheet.eachRow((row, rowNumber) => {
         if (rowNumber > 1) {
           row.eachCell((cell) => {
             if (typeof cell.value === "number") {
-              cell.numFmt = '#,##0.00;[Red]-#,##0.00';
+              cell.numFmt = "#,##0.00;[Red]-#,##0.00";
             }
           });
         }
@@ -269,18 +278,14 @@ export const exportGroupExpenses = async (req, res) => {
 
     res.setHeader(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
-
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${filename}"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
-    console.error("Export error:", error.message);
+    console.error("Export error:", error);
 
     if (!res.headersSent) {
       return res.status(500).json({
