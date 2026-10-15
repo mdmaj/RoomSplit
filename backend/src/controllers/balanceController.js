@@ -6,57 +6,168 @@ import Settlement from "../models/Settlement.js";
 const isMember = (group, userId) =>
   group.members.some((member) => {
     const memberUserId = member.user?._id ?? member.user;
-
     return memberUserId?.toString() === userId?.toString();
   });
 
-const calculateGroupBalances = async (groupId, group) => {
-  const balances = new Map();
+const getUserId = (user) => (user?._id ?? user)?.toString();
 
-  for (const member of group.members) {
-    const user = member.user?._id ?? member.user;
+const getGroupBalancesData = async (groupId, group) => {
+  const members = group.members.map((member) => {
+    const user = member.user?._id ? member.user : member.user;
+    const userId = getUserId(user);
 
-    balances.set(user.toString(), {
-      userId: user,
+    return {
+      userId,
       name: member.user?.name ?? "Member",
+      email: member.user?.email ?? "",
       totalPaidPaise: 0,
       totalSharePaise: 0,
-    });
-  }
+      netBalancePaise: 0,
+    };
+  });
+
+  const balances = new Map(members.map((member) => [member.userId, member]));
 
   const expenses = await Expense.find({ groupId });
 
   for (const expense of expenses) {
-    const payer = balances.get(expense.paidBy.toString());
+    const amountPaise = expense.amountPaise;
+    const payerId = getUserId(expense.paidBy);
+    const payer = balances.get(payerId);
 
-    if (payer) payer.totalPaidPaise += expense.amountPaise;
+    // Actual spending is recorded only against the roommate who paid.
+    if (payer) {
+      payer.totalPaidPaise += amountPaise;
+    }
 
-    for (const participant of expense.participants) {
-      const balance = balances.get(participant.user.toString());
+    const participants = Array.isArray(expense.participants)
+      ? expense.participants
+      : [];
 
-      if (balance) balance.totalSharePaise += participant.sharePaise;
+    if (participants.length > 0) {
+      // Preserve legacy expenses with saved individual shares.
+      for (const participant of participants) {
+        const participantId = getUserId(participant.user);
+        const balance = balances.get(participantId);
+
+        if (balance) {
+          balance.totalSharePaise += participant.sharePaise;
+        }
+      }
+    } else if (members.length > 0) {
+      // New expenses: divide equally across all group members.
+      const baseShare = Math.floor(amountPaise / members.length);
+      const remainder = amountPaise % members.length;
+
+      members.forEach((member, index) => {
+        const balance = balances.get(member.userId);
+
+        if (balance) {
+          balance.totalSharePaise += baseShare + (index < remainder ? 1 : 0);
+        }
+      });
     }
   }
 
+  // Settlements change outstanding balances, NOT spending totals.
   const settlements = await Settlement.find({
     groupId,
     status: "completed",
   });
 
   for (const settlement of settlements) {
-    const payer = balances.get(settlement.paidBy.toString());
-    const receiver = balances.get(settlement.paidTo.toString());
+    const payer = balances.get(getUserId(settlement.paidBy));
+    const receiver = balances.get(getUserId(settlement.paidTo));
 
-    if (payer) payer.totalPaidPaise += settlement.amountPaise;
-    if (receiver) receiver.totalPaidPaise -= settlement.amountPaise;
+    if (payer) {
+      payer.netBalancePaise += settlement.amountPaise;
+    }
+
+    if (receiver) {
+      receiver.netBalancePaise -= settlement.amountPaise;
+    }
   }
 
-  return [...balances.values()].map((balance) => ({
-    ...balance,
-    netBalancePaise:
-      balance.totalPaidPaise - balance.totalSharePaise,
-  }));
+  // Net = expenses paid - fair share + settlements sent - settlements received.
+  for (const balance of members) {
+    balance.netBalancePaise = balance.totalPaidPaise - balance.totalSharePaise;
+
+    // Recalculate settlement effects below to avoid mixing them with spending.
+  }
+
+  for (const settlement of settlements) {
+    const payer = balances.get(getUserId(settlement.paidBy));
+    const receiver = balances.get(getUserId(settlement.paidTo));
+
+    if (payer) {
+      payer.netBalancePaise += settlement.amountPaise;
+    }
+
+    if (receiver) {
+      receiver.netBalancePaise -= settlement.amountPaise;
+    }
+  }
+
+  return {
+    balances: members,
+    settlements,
+  };
 };
+
+const buildSuggestedTransfers = (balanceList) => {
+  const creditors = balanceList
+    .filter((balance) => balance.netBalancePaise > 0)
+    .map((balance) => ({
+      userId: balance.userId,
+      name: balance.name,
+      remainingPaise: balance.netBalancePaise,
+    }));
+
+  const debtors = balanceList
+    .filter((balance) => balance.netBalancePaise < 0)
+    .map((balance) => ({
+      userId: balance.userId,
+      name: balance.name,
+      remainingPaise: -balance.netBalancePaise,
+    }));
+
+  const suggestedTransfers = [];
+  let creditorIndex = 0;
+  let debtorIndex = 0;
+
+  while (creditorIndex < creditors.length && debtorIndex < debtors.length) {
+    const creditor = creditors[creditorIndex];
+    const debtor = debtors[debtorIndex];
+
+    const amountPaise = Math.min(
+      creditor.remainingPaise,
+      debtor.remainingPaise,
+    );
+
+    if (amountPaise > 0) {
+      suggestedTransfers.push({
+        from: {
+          userId: debtor.userId,
+          name: debtor.name,
+        },
+        to: {
+          userId: creditor.userId,
+          name: creditor.name,
+        },
+        amountPaise,
+      });
+    }
+
+    creditor.remainingPaise -= amountPaise;
+    debtor.remainingPaise -= amountPaise;
+
+    if (creditor.remainingPaise === 0) creditorIndex++;
+    if (debtor.remainingPaise === 0) debtorIndex++;
+  }
+
+  return suggestedTransfers;
+};
+
 export const getGroupBalances = async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -87,123 +198,15 @@ export const getGroupBalances = async (req, res) => {
       });
     }
 
-    const balances = new Map();
-
-    for (const member of group.members) {
-      const user = member.user;
-
-      balances.set(user._id.toString(), {
-        userId: user._id,
-        name: user.name,
-        email: user.email,
-        totalPaidPaise: 0,
-        totalSharePaise: 0,
-        netBalancePaise: 0,
-      });
-    }
-
-    const expenses = await Expense.find({ groupId });
-
-    for (const expense of expenses) {
-      const payerId = expense.paidBy.toString();
-      const payerBalance = balances.get(payerId);
-
-      if (payerBalance) {
-        payerBalance.totalPaidPaise += expense.amountPaise;
-      }
-
-      for (const participant of expense.participants) {
-        const participantId = participant.user.toString();
-        const participantBalance = balances.get(participantId);
-
-        if (participantBalance) {
-          participantBalance.totalSharePaise += participant.sharePaise;
-        }
-      }
-    }
-
-    const settlements = await Settlement.find({
-      groupId,
-      status: "completed",
-    });
-
-    for (const settlement of settlements) {
-      const payerBalance = balances.get(settlement.paidBy.toString());
-      const receiverBalance = balances.get(settlement.paidTo.toString());
-
-      if (payerBalance) {
-        payerBalance.totalPaidPaise += settlement.amountPaise;
-      }
-
-      if (receiverBalance) {
-        receiverBalance.totalPaidPaise -= settlement.amountPaise;
-      }
-    }
-
-    const balanceList = Array.from(balances.values()).map((balance) => ({
-      ...balance,
-      netBalancePaise: balance.totalPaidPaise - balance.totalSharePaise,
-    }));
-
-    // Positive = should receive; negative = owes money.
-    // Greedily match debtors and creditors to suggest transfers.
-    const creditors = balanceList
-      .filter((balance) => balance.netBalancePaise > 0)
-      .map((balance) => ({
-        userId: balance.userId,
-        name: balance.name,
-        remainingPaise: balance.netBalancePaise,
-      }));
-
-    const debtors = balanceList
-      .filter((balance) => balance.netBalancePaise < 0)
-      .map((balance) => ({
-        userId: balance.userId,
-        name: balance.name,
-        remainingPaise: -balance.netBalancePaise,
-      }));
-
-    const suggestedTransfers = [];
-    let creditorIndex = 0;
-    let debtorIndex = 0;
-
-    while (creditorIndex < creditors.length && debtorIndex < debtors.length) {
-      const creditor = creditors[creditorIndex];
-      const debtor = debtors[debtorIndex];
-
-      const amountPaise = Math.min(
-        creditor.remainingPaise,
-        debtor.remainingPaise,
-      );
-
-      if (amountPaise > 0) {
-        suggestedTransfers.push({
-          from: {
-            userId: debtor.userId,
-            name: debtor.name,
-          },
-          to: {
-            userId: creditor.userId,
-            name: creditor.name,
-          },
-          amountPaise,
-        });
-      }
-
-      creditor.remainingPaise -= amountPaise;
-      debtor.remainingPaise -= amountPaise;
-
-      if (creditor.remainingPaise === 0) creditorIndex++;
-      if (debtor.remainingPaise === 0) debtorIndex++;
-    }
+    const { balances } = await getGroupBalancesData(groupId, group);
 
     return res.status(200).json({
       success: true,
-      balances: balanceList,
-      suggestedTransfers,
+      balances,
+      suggestedTransfers: buildSuggestedTransfers(balances),
     });
   } catch (error) {
-    console.error("Get balances error:", error.message);
+    console.error("Get balances error:", error);
 
     return res.status(500).json({
       success: false,
@@ -212,33 +215,22 @@ export const getGroupBalances = async (req, res) => {
   }
 };
 
-
 export const createSettlement = async (req, res) => {
   try {
     const { groupId } = req.params;
     const { paidTo, amount, note } = req.body;
 
-    // Validate IDs
-    if (!mongoose.isValidObjectId(groupId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid group ID.",
-      });
-    }
-
-    if (!mongoose.isValidObjectId(paidTo)) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid recipient user ID is required.",
-      });
-    }
-
-    // Validate amount
     if (
-      typeof amount !== "number" ||
-      !Number.isFinite(amount) ||
-      amount <= 0
+      !mongoose.isValidObjectId(groupId) ||
+      !mongoose.isValidObjectId(paidTo)
     ) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid group and recipient IDs are required.",
+      });
+    }
+
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({
         success: false,
         message: "Amount must be a positive number in rupees.",
@@ -257,7 +249,6 @@ export const createSettlement = async (req, res) => {
       });
     }
 
-    // Validate note
     if (
       note !== undefined &&
       note !== null &&
@@ -265,11 +256,10 @@ export const createSettlement = async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "Note must be a string of at most 300 characters.",
+        message: "Note must not exceed 300 characters.",
       });
     }
 
-    // Fetch group — this was missing in your code
     const group = await Group.findById(groupId);
 
     if (!group) {
@@ -296,20 +286,23 @@ export const createSettlement = async (req, res) => {
     if (paidTo.toString() === req.user._id.toString()) {
       return res.status(400).json({
         success: false,
-        message: "You cannot settle a payment with yourself.",
+        message: "You cannot record a payment to yourself.",
       });
     }
 
-    // Calculate current balances
-    const balances = await calculateGroupBalances(groupId, group);
+    const populatedGroup = await Group.findById(groupId).populate(
+      "members.user",
+      "name email",
+    );
+
+    const { balances } = await getGroupBalancesData(groupId, populatedGroup);
 
     const senderBalance = balances.find(
-      (balance) =>
-        balance.userId.toString() === req.user._id.toString()
+      (balance) => balance.userId === req.user._id.toString(),
     );
 
     const recipientBalance = balances.find(
-      (balance) => balance.userId.toString() === paidTo.toString()
+      (balance) => balance.userId === paidTo.toString(),
     );
 
     if (
@@ -326,19 +319,18 @@ export const createSettlement = async (req, res) => {
 
     const outstandingPaise = Math.min(
       -senderBalance.netBalancePaise,
-      recipientBalance.netBalancePaise
+      recipientBalance.netBalancePaise,
     );
 
     if (amountPaise > outstandingPaise) {
       return res.status(400).json({
         success: false,
-        message: `Settlement exceeds the outstanding amount of ₹${(
+        message: `Payment exceeds the outstanding amount of ₹${(
           outstandingPaise / 100
         ).toFixed(2)}.`,
       });
     }
 
-    // Create settlement
     const settlement = await Settlement.create({
       groupId,
       paidBy: req.user._id,
@@ -354,7 +346,7 @@ export const createSettlement = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Settlement recorded successfully.",
+      message: "Payment recorded successfully.",
       settlement: populatedSettlement,
     });
   } catch (error) {
@@ -362,7 +354,7 @@ export const createSettlement = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Failed to record settlement.",
+      message: "Failed to record payment.",
     });
   }
 };
@@ -405,11 +397,11 @@ export const getGroupSettlements = async (req, res) => {
       settlements,
     });
   } catch (error) {
-    console.error("Get settlements error:", error.message);
+    console.error("Get settlements error:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch settlements.",
+      message: "Failed to fetch payments.",
     });
   }
 };

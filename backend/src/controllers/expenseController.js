@@ -2,14 +2,10 @@ import mongoose from "mongoose";
 import Expense from "../models/Expense.js";
 import Group from "../models/Group.js";
 
-// Check whether a user belongs to the group.
 const isMember = (group, userId) =>
-  group.members.some((member) => {
-    const memberUserId = member.user?._id ?? member.user;
-    return memberUserId?.toString() === userId?.toString();
-  });
+  group.members.some((member) => member.user.toString() === userId.toString());
 
-// Add a new expense.
+// Add a new expense
 export const createExpense = async (req, res) => {
   try {
     const { title, amount, category, paidBy, participants, date, notes } =
@@ -17,7 +13,7 @@ export const createExpense = async (req, res) => {
 
     const { groupId } = req.params;
 
-    // Validate group ID.
+    // 1. Validate group ID
     if (!mongoose.isValidObjectId(groupId)) {
       return res.status(400).json({
         success: false,
@@ -25,7 +21,7 @@ export const createExpense = async (req, res) => {
       });
     }
 
-    // Validate title.
+    // 2. Validate title
     if (
       typeof title !== "string" ||
       !title.trim() ||
@@ -37,7 +33,7 @@ export const createExpense = async (req, res) => {
       });
     }
 
-    // Validate amount in rupees, allowing at most 2 decimal places.
+    // 3. Validate amount
     if (
       typeof amount !== "number" ||
       !Number.isFinite(amount) ||
@@ -51,28 +47,19 @@ export const createExpense = async (req, res) => {
       });
     }
 
-    // Validate category.
-    const allowedCategories = [
-      "Rent",
-      "Groceries",
-      "Electricity",
-      "Internet",
-      "Food",
-      "Transport",
-      "Cleaning",
-      "Other",
-    ];
-
-    const expenseCategory = category?.trim() || "Other";
-
-    if (!allowedCategories.includes(expenseCategory)) {
+    // 4. Validate category
+    if (
+      category !== undefined &&
+      category !== null &&
+      (typeof category !== "string" || category.trim().length > 50)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Please select a valid expense category.",
+        message: "Category must be a string of at most 50 characters.",
       });
     }
 
-    // Validate notes.
+    // 5. Validate notes
     if (
       notes !== undefined &&
       notes !== null &&
@@ -84,7 +71,7 @@ export const createExpense = async (req, res) => {
       });
     }
 
-    // Validate date.
+    // 6. Validate date
     let expenseDate = new Date();
 
     if (date !== undefined && date !== null && date !== "") {
@@ -98,7 +85,7 @@ export const createExpense = async (req, res) => {
       }
     }
 
-    // Find group.
+    // 7. Find group
     const group = await Group.findById(groupId);
 
     if (!group) {
@@ -108,7 +95,7 @@ export const createExpense = async (req, res) => {
       });
     }
 
-    // Verify that the current user belongs to the group.
+    // 8. Verify current user belongs to the group
     if (!isMember(group, req.user._id)) {
       return res.status(403).json({
         success: false,
@@ -117,13 +104,10 @@ export const createExpense = async (req, res) => {
     }
 
     const memberIds = new Set(
-      group.members.map((member) => {
-        const memberUserId = member.user?._id ?? member.user;
-        return memberUserId.toString();
-      }),
+      group.members.map((member) => member.user.toString()),
     );
 
-    // Default payer is the logged-in user.
+    // 9. Validate payer
     const payerId =
       paidBy === undefined || paidBy === null || paidBy === ""
         ? req.user._id.toString()
@@ -136,8 +120,8 @@ export const createExpense = async (req, res) => {
       });
     }
 
-    // Participants are optional for new expenses.
-    // If supplied by an older client, preserve the existing split behavior.
+    // 10. Participants are optional in the new RoomSplit flow.
+    // If supplied by an older client, validate and preserve them.
     let splitParticipants = [];
 
     if (participants !== undefined && participants !== null) {
@@ -148,7 +132,11 @@ export const createExpense = async (req, res) => {
         });
       }
 
-      const participantIds = participants.map((id) => String(id));
+      const participantIds = participants.map((item) =>
+        typeof item === "object" && item !== null
+          ? String(item.user ?? item._id ?? "")
+          : String(item),
+      );
 
       if (
         participantIds.some(
@@ -168,33 +156,31 @@ export const createExpense = async (req, res) => {
         });
       }
 
-      // Divide in paise to avoid floating-point money errors.
-      const amountPaise = Math.round(amount * 100);
-      const baseShare =
-        participantIds.length > 0
-          ? Math.floor(amountPaise / participantIds.length)
-          : 0;
-      const remainder =
-        participantIds.length > 0 ? amountPaise % participantIds.length : 0;
+      if (participantIds.length > 0) {
+        const amountPaise = Math.round(amount * 100);
+        const baseShare = Math.floor(amountPaise / participantIds.length);
+        const remainder = amountPaise % participantIds.length;
 
-      splitParticipants = participantIds.map((user, index) => ({
-        user,
-        sharePaise: baseShare + (index < remainder ? 1 : 0),
-      }));
+        splitParticipants = participantIds.map((user, index) => ({
+          user,
+          sharePaise: baseShare + (index < remainder ? 1 : 0),
+        }));
+      }
     }
 
-    // Create expense. The full amount is attributed to the actual payer.
+    // 11. Save amount in paise to avoid floating-point money errors
     const expense = await Expense.create({
       groupId,
       title: title.trim(),
       amountPaise: Math.round(amount * 100),
-      category: expenseCategory,
+      category: category?.trim() || "Other",
       paidBy: payerId,
       participants: splitParticipants,
       date: expenseDate,
       notes: notes?.trim() || "",
     });
 
+    // 12. Return populated expense
     const populatedExpense = await Expense.findById(expense._id)
       .populate("paidBy", "name email")
       .populate("participants.user", "name email");
@@ -214,7 +200,7 @@ export const createExpense = async (req, res) => {
   }
 };
 
-// Get all expenses for a group.
+// Get all expenses for a group
 export const getGroupExpenses = async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -262,7 +248,7 @@ export const getGroupExpenses = async (req, res) => {
   }
 };
 
-// Get one expense.
+// Get one expense
 export const getExpenseById = async (req, res) => {
   try {
     const { expenseId } = req.params;
@@ -308,7 +294,7 @@ export const getExpenseById = async (req, res) => {
   }
 };
 
-// Delete an expense: payer or group creator only.
+// Delete an expense: payer or group creator only
 export const deleteExpense = async (req, res) => {
   try {
     const { expenseId } = req.params;
