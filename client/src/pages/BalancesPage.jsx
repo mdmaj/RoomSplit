@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  ChevronDown,
   LoaderCircle,
   Wallet,
 } from "lucide-react";
@@ -388,22 +389,29 @@ export default function BalancesPage() {
                 <label className="mb-1.5 block text-sm font-medium">
                   Paid to
                 </label>
-                <select
-                  value={paidTo}
-                  onChange={(event) => setPaidTo(event.target.value)}
-                  required
-                  className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                >
-                  <option value="">Select roommate</option>
-                  {members.map((member) => {
-                    const id = memberId(member);
-                    return (
-                      <option key={id} value={id}>
-                        {memberName(member)}
-                      </option>
-                    );
-                  })}
-                </select>
+                <div className="relative min-w-0 w-full">
+                  <select
+                    value={paidTo}
+                    onChange={(event) => setPaidTo(event.target.value)}
+                    required
+                    className="min-h-12 min-w-0 max-w-full w-full appearance-none truncate rounded-xl border border-slate-300 bg-white px-3.5 py-3 pr-10 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  >
+                    <option value="">Select roommate</option>
+                    {members.map((member) => {
+                      const id = memberId(member);
+                      return (
+                        <option key={id} value={id}>
+                          {memberName(member)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
+                    size={18}
+                  />
+                </div>
               </div>
 
               <div>

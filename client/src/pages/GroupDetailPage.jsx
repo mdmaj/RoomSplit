@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   FileSpreadsheet,
   BarChart3,
+  ChevronDown,
   PieChart,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -657,22 +658,29 @@ export default function GroupDetailPage() {
                   Who paid?
                 </label>
 
-                <select
-                  value={paidBy}
-                  onChange={(event) => setPaidBy(event.target.value)}
-                  required
-                  className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                >
-                  {members.map((member) => {
-                    const id = getMemberId(member);
+                <div className="relative min-w-0 w-full">
+                  <select
+                    value={paidBy}
+                    onChange={(event) => setPaidBy(event.target.value)}
+                    required
+                    className="min-h-12 min-w-0 max-w-full w-full appearance-none truncate rounded-xl border border-slate-300 bg-white px-3.5 py-3 pr-10 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  >
+                    {members.map((member) => {
+                      const id = getMemberId(member);
 
-                    return (
-                      <option key={id} value={id}>
-                        {getMemberName(member)}
-                      </option>
-                    );
-                  })}
-                </select>
+                      return (
+                        <option key={id} value={id}>
+                          {getMemberName(member)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
+                    size={18}
+                  />
+                </div>
               </div>
 
               <div>
