@@ -3,9 +3,11 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+const SESSION_DAYS = 30;
+
 const createToken = (userId) =>
   jwt.sign({ userId }, process.env.JWT_SECRET, {
-    expiresIn: "7d",
+    expiresIn: `${SESSION_DAYS}d`,
   });
 
 
@@ -15,7 +17,7 @@ const cookieOptions = {
   httpOnly: true,
   secure: isProduction,
   sameSite: isProduction ? "none" : "lax",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
   path: "/",
 };
 
@@ -132,12 +134,7 @@ export const login= async (req, res) => {
 };
 
 export const logout = (req, res) => {
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-  });
+  res.clearCookie("token", cookieOptions);
 
   return res.json({ message: "Logged out successfully" });
 };

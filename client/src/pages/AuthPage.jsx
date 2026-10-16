@@ -39,10 +39,10 @@ export default function AuthPage({ mode = "login" }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
-      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-7 shadow-sm sm:p-10">
-        <Link to="/" className="mb-8 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-linear-to-br from-emerald-50 via-slate-50 to-teal-50 px-3 py-6 sm:px-4 sm:py-10">
+      <div className="w-full max-w-md rounded-3xl border border-white/80 bg-white p-5 shadow-xl shadow-emerald-900/5 sm:p-10">
+        <Link to="/" className="mb-7 flex items-center gap-3 sm:mb-8">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white sm:h-12 sm:w-12">
             <Wallet size={25} />
           </div>
           <div>
@@ -60,7 +60,7 @@ export default function AuthPage({ mode = "login" }) {
             : "Sign in to manage your household expenses."}
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+        <form onSubmit={handleSubmit} className="mt-7 space-y-5 sm:mt-8">
           {isRegister && (
             <div>
               <label className="mb-2 block text-sm font-medium" htmlFor="name">
@@ -75,7 +75,7 @@ export default function AuthPage({ mode = "login" }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Enter your name"
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                className="min-h-12 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
               />
             </div>
           )}
@@ -92,7 +92,7 @@ export default function AuthPage({ mode = "login" }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+              className="min-h-12 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
             />
           </div>
 
@@ -110,7 +110,7 @@ export default function AuthPage({ mode = "login" }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={isRegister ? "At least 8 characters" : "Enter password"}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+              className="min-h-12 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
             />
           </div>
 
@@ -123,7 +123,7 @@ export default function AuthPage({ mode = "login" }) {
           <button
             type="submit"
             disabled={submitting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting
               ? "Please wait..."

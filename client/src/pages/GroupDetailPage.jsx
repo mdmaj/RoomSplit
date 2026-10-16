@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -69,9 +68,14 @@ function getExpenseMonth(expense) {
 
   if (Number.isNaN(date.getTime())) return "";
 
-  return `${date.getFullYear()}-${String(
-    date.getMonth() + 1,
-  ).padStart(2, "0")}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}`;
+}
+
+function getCurrentMonthKey() {
+  return getExpenseMonth({ date: new Date() });
 }
 
 function calculateSuggestedTransfers(members, expenses) {
@@ -138,10 +142,7 @@ function calculateSuggestedTransfers(members, expenses) {
   let creditorIndex = 0;
 
   // Match people who owe money with people who should receive money.
-  while (
-    debtorIndex < debtors.length &&
-    creditorIndex < creditors.length
-  ) {
+  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
     const debtor = debtors[debtorIndex];
     const creditor = creditors[creditorIndex];
 
@@ -190,7 +191,7 @@ export default function GroupDetailPage() {
   const [paidBy, setPaidBy] = useState("");
   const [notes, setNotes] = useState("");
 
-  const [selectedMonth, setSelectedMonth] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey);
   const [splitResult, setSplitResult] = useState(null);
 
   const members = useMemo(
@@ -228,8 +229,7 @@ export default function GroupDetailPage() {
         api.get(`/expenses/groups/${groupId}`),
       ]);
 
-      const groupsData =
-        groupsResponse.data.groups ?? groupsResponse.data;
+      const groupsData = groupsResponse.data.groups ?? groupsResponse.data;
 
       const foundGroup = Array.isArray(groupsData)
         ? groupsData.find((item) => item._id === groupId)
@@ -237,9 +237,7 @@ export default function GroupDetailPage() {
 
       if (!foundGroup) {
         setGroup(null);
-        setError(
-          "Group nahi mila. Please dashboard se dobara open karo.",
-        );
+        setError("Group nahi mila. Please dashboard se dobara open karo.");
         return;
       }
 
@@ -278,7 +276,9 @@ export default function GroupDetailPage() {
   }, [groupId, user]);
 
   useEffect(() => {
-    loadGroupData();
+    // The async request updates local state when the external data arrives.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadGroupData();
   }, [loadGroupData]);
 
   async function handleAddExpense(event) {
@@ -297,9 +297,7 @@ export default function GroupDetailPage() {
     if (
       !Number.isFinite(numericAmount) ||
       numericAmount <= 0 ||
-      Math.abs(
-        numericAmount * 100 - Math.round(numericAmount * 100),
-      ) > 1e-7
+      Math.abs(numericAmount * 100 - Math.round(numericAmount * 100)) > 1e-7
     ) {
       setError(
         "Amount zero se zyada hona chahiye aur maximum 2 decimal places hone chahiye.",
@@ -331,9 +329,7 @@ export default function GroupDetailPage() {
 
       await loadGroupData();
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Expense add nahi ho saka.",
-      );
+      setError(err.response?.data?.message || "Expense add nahi ho saka.");
     } finally {
       setSubmitting(false);
     }
@@ -350,30 +346,22 @@ export default function GroupDetailPage() {
     }
 
     if (members.length < 2) {
-      setError(
-        "Split calculate karne ke liye kam se kam 2 roommates chahiye.",
-      );
+      setError("Split calculate karne ke liye kam se kam 2 roommates chahiye.");
       return;
     }
 
-    const result = calculateSuggestedTransfers(
-      members,
-      filteredExpenses,
-    );
+    const result = calculateSuggestedTransfers(members, filteredExpenses);
 
     setSplitResult(result);
   }
 
   const handleExport = async () => {
     try {
-      const response = await api.get(
-        `/export/groups/${groupId}/excel`,
-        { responseType: "blob" },
-      );
+      const response = await api.get(`/export/groups/${groupId}/excel`, {
+        responseType: "blob",
+      });
 
-      const fileURL = window.URL.createObjectURL(
-        new Blob([response.data]),
-      );
+      const fileURL = window.URL.createObjectURL(new Blob([response.data]));
 
       const link = document.createElement("a");
       link.href = fileURL;
@@ -399,8 +387,7 @@ export default function GroupDetailPage() {
       const expenseCategory = expense.category || "Other";
 
       totals[expenseCategory] =
-        (totals[expenseCategory] || 0) +
-        getExpenseAmount(expense);
+        (totals[expenseCategory] || 0) + getExpenseAmount(expense);
 
       return totals;
     }, {});
@@ -417,13 +404,9 @@ export default function GroupDetailPage() {
       const payerName =
         (typeof expense.paidBy === "object" &&
           (expense.paidBy?.name || expense.paidBy?.email)) ||
-        (matchedMember
-          ? getMemberName(matchedMember)
-          : "Unknown roommate");
+        (matchedMember ? getMemberName(matchedMember) : "Unknown roommate");
 
-      totals[payerName] =
-        (totals[payerName] || 0) +
-        getExpenseAmount(expense);
+      totals[payerName] = (totals[payerName] || 0) + getExpenseAmount(expense);
 
       return totals;
     }, {});
@@ -453,15 +436,12 @@ export default function GroupDetailPage() {
     const months = [];
 
     for (let offset = 5; offset >= 0; offset -= 1) {
-      const date = new Date(
-        now.getFullYear(),
-        now.getMonth() - offset,
-        1,
-      );
+      const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
 
-      const key = `${date.getFullYear()}-${String(
-        date.getMonth() + 1,
-      ).padStart(2, "0")}`;
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+        2,
+        "0",
+      )}`;
 
       months.push({
         key,
@@ -472,9 +452,7 @@ export default function GroupDetailPage() {
       });
     }
 
-    const totalsByMonth = new Map(
-      months.map((month) => [month.key, 0]),
-    );
+    const totalsByMonth = new Map(months.map((month) => [month.key, 0]));
 
     expenses.forEach((expense) => {
       const monthKey = getExpenseMonth(expense);
@@ -482,8 +460,7 @@ export default function GroupDetailPage() {
 
       totalsByMonth.set(
         monthKey,
-        totalsByMonth.get(monthKey) +
-          getExpenseAmount(expense),
+        totalsByMonth.get(monthKey) + getExpenseAmount(expense),
       );
     });
 
@@ -509,11 +486,9 @@ export default function GroupDetailPage() {
 
   if (!group) {
     return (
-      <div className="min-h-screen bg-slate-50 p-6">
+      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
         <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-6">
-          <p className="text-red-600">
-            {error || "Group nahi mila."}
-          </p>
+          <p className="text-red-600">{error || "Group nahi mila."}</p>
 
           <Link
             to="/dashboard"
@@ -530,7 +505,7 @@ export default function GroupDetailPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
           <Link
             to="/dashboard"
             className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-indigo-600"
@@ -545,30 +520,30 @@ export default function GroupDetailPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <section className="mb-7 rounded-3xl bg-indigo-600 p-6 text-white sm:p-8">
-          <div className="flex items-start gap-4">
-            <div className="rounded-2xl bg-white/15 p-3">
+      <main className="mx-auto w-full max-w-6xl px-3 py-5 sm:px-6 sm:py-8">
+        <section className="relative mb-6 overflow-hidden rounded-2xl bg-linear-to-br from-emerald-700 via-emerald-600 to-teal-600 p-4 text-white shadow-lg shadow-emerald-900/10 sm:mb-7 sm:rounded-3xl sm:p-8">
+          <div className="pointer-events-none absolute -right-10 -top-14 h-32 w-32 rounded-full border-16 border-white/10 sm:h-48 sm:w-48 sm:border-24" />
+          <div className="pointer-events-none absolute -bottom-20 right-10 h-36 w-36 rounded-full bg-white/5 sm:right-24 sm:h-44 sm:w-44" />
+          <div className="relative z-10 flex min-w-0 items-start gap-3 sm:gap-4">
+            <div className="shrink-0 rounded-xl bg-white/15 p-2.5 sm:rounded-2xl sm:p-3">
               <Wallet size={27} />
             </div>
 
             <div className="min-w-0">
-              <p className="text-sm text-indigo-100">
-                Your household
-              </p>
+              <p className="text-sm text-emerald-50">Your household</p>
 
-              <h1 className="mt-1 break-words text-3xl font-bold">
+              <h1 className="mt-1 wrap-break-word text-2xl font-bold sm:text-3xl">
                 {group.name}
               </h1>
 
-              <p className="mt-2 text-sm text-indigo-100">
+              <p className="mt-2 text-sm text-emerald-50">
                 Track household expenses with your roommates.
               </p>
 
-              <div className="mt-5 flex flex-wrap gap-3">
+              <div className="mt-5 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:gap-3">
                 <Link
                   to={`/groups/${groupId}/balances`}
-                  className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 font-semibold text-indigo-700 transition hover:bg-indigo-50"
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-50 sm:w-auto sm:text-base"
                 >
                   <Wallet size={18} />
                   View balances
@@ -577,7 +552,7 @@ export default function GroupDetailPage() {
                 <button
                   type="button"
                   onClick={handleExport}
-                  className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 font-semibold text-indigo-700 transition hover:bg-indigo-50"
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-50 sm:w-auto sm:text-base"
                 >
                   <FileSpreadsheet size={18} />
                   Export Excel
@@ -586,8 +561,7 @@ export default function GroupDetailPage() {
 
               <div className="mt-4 flex items-center gap-2 text-sm">
                 <Users size={17} />
-                {members.length}{" "}
-                {members.length === 1 ? "member" : "members"}
+                {members.length} {members.length === 1 ? "member" : "members"}
               </div>
             </div>
           </div>
@@ -611,28 +585,23 @@ export default function GroupDetailPage() {
           </div>
         )}
 
-        <div className="grid items-start gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           {/* Add expense form */}
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="mb-5 flex items-center gap-3">
               <div className="rounded-xl bg-indigo-50 p-2.5 text-indigo-600">
                 <Plus size={21} />
               </div>
 
               <div>
-                <h2 className="text-lg font-bold">
-                  Add an expense
-                </h2>
+                <h2 className="text-lg font-bold">Add an expense</h2>
                 <p className="text-sm text-slate-500">
                   Record who actually paid for an expense.
                 </p>
               </div>
             </div>
 
-            <form
-              onSubmit={handleAddExpense}
-              className="space-y-4"
-            >
+            <form onSubmit={handleAddExpense} className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">
                   Expense title
@@ -644,7 +613,7 @@ export default function GroupDetailPage() {
                   placeholder="e.g. Monthly rent"
                   maxLength={100}
                   required
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="min-h-12 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
 
@@ -661,7 +630,7 @@ export default function GroupDetailPage() {
                   min="0.01"
                   step="0.01"
                   required
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="min-h-12 w-full rounded-xl border border-slate-300 px-3.5 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
 
@@ -673,7 +642,7 @@ export default function GroupDetailPage() {
                 <select
                   value={category}
                   onChange={(event) => setCategory(event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 >
                   {categories.map((item) => (
                     <option key={item} value={item}>
@@ -692,7 +661,7 @@ export default function GroupDetailPage() {
                   value={paidBy}
                   onChange={(event) => setPaidBy(event.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 >
                   {members.map((member) => {
                     const id = getMemberId(member);
@@ -709,9 +678,7 @@ export default function GroupDetailPage() {
               <div>
                 <label className="mb-1.5 block text-sm font-medium">
                   Notes{" "}
-                  <span className="font-normal text-slate-400">
-                    (optional)
-                  </span>
+                  <span className="font-normal text-slate-400">(optional)</span>
                 </label>
 
                 <textarea
@@ -720,21 +687,18 @@ export default function GroupDetailPage() {
                   placeholder="Add any details..."
                   rows={2}
                   maxLength={500}
-                  className="w-full resize-y rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="min-h-12 w-full resize-y rounded-xl border border-slate-300 px-3.5 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={submitting || members.length === 0}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? (
                   <>
-                    <LoaderCircle
-                      className="animate-spin"
-                      size={18}
-                    />
+                    <LoaderCircle className="animate-spin" size={18} />
                     Saving...
                   </>
                 ) : (
@@ -748,7 +712,7 @@ export default function GroupDetailPage() {
           </section>
 
           {/* Recent expenses and monthly split */}
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-600">
@@ -756,9 +720,7 @@ export default function GroupDetailPage() {
                 </div>
 
                 <div>
-                  <h2 className="text-lg font-bold">
-                    Recent expenses
-                  </h2>
+                  <h2 className="text-lg font-bold">This month's expenses</h2>
                   <p className="text-sm text-slate-500">
                     {expenses.length} recorded
                   </p>
@@ -766,11 +728,8 @@ export default function GroupDetailPage() {
               </div>
             </div>
 
-            <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-              <label
-                className="sr-only"
-                htmlFor="expense-month-filter"
-              >
+            <div className="mb-5 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <label className="sr-only" htmlFor="expense-month-filter">
                 Filter expenses by month
               </label>
 
@@ -782,7 +741,7 @@ export default function GroupDetailPage() {
                   setSplitResult(null);
                   setError("");
                 }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:w-auto"
+                className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 sm:w-auto"
               >
                 <option value="all">All months</option>
 
@@ -802,9 +761,7 @@ export default function GroupDetailPage() {
                 )
                   .sort((a, b) => b.localeCompare(a))
                   .map((value) => {
-                    const [year, month] = value
-                      .split("-")
-                      .map(Number);
+                    const [year, month] = value.split("-").map(Number);
 
                     const date = new Date(year, month - 1, 1);
 
@@ -819,8 +776,8 @@ export default function GroupDetailPage() {
                   })}
               </select>
 
-              <div className="rounded-xl bg-indigo-50 px-4 py-3 sm:min-w-52">
-                <p className="text-xs font-medium text-indigo-700">
+              <div className="min-w-0 rounded-xl bg-emerald-50 px-3 py-3 sm:min-w-52 sm:px-4">
+                <p className="text-xs font-medium text-emerald-700">
                   {selectedMonth === "all"
                     ? "Total household expenses"
                     : "Selected month total"}
@@ -838,8 +795,8 @@ export default function GroupDetailPage() {
             </div>
 
             {/* Monthly split */}
-            <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="mb-5 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+              <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <h3 className="font-bold text-slate-900">
                     Monthly expense split
@@ -853,28 +810,24 @@ export default function GroupDetailPage() {
                 <button
                   type="button"
                   onClick={handleSplitExpenses}
-                  disabled={
-                    selectedMonth === "all" || members.length < 2
-                  }
-                  className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={selectedMonth === "all" || members.length < 2}
+                  className="min-h-11 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   Split Expenses
                 </button>
               </div>
 
               {selectedMonth === "all" && (
-                <p className="mt-3 text-xs text-indigo-700">
+                <p className="mt-3 text-xs text-emerald-700">
                   Select a specific month above to calculate the split.
                 </p>
               )}
 
               {splitResult && (
-                <div className="mt-4 border-t border-indigo-200 pt-4">
+                <div className="mt-4 border-t border-emerald-200 pt-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-lg bg-white p-3">
-                      <p className="text-xs text-slate-500">
-                        Monthly spending
-                      </p>
+                      <p className="text-xs text-slate-500">Monthly spending</p>
                       <p className="mt-1 font-bold">
                         {formatRupees(splitResult.totalPaise / 100)}
                       </p>
@@ -898,7 +851,7 @@ export default function GroupDetailPage() {
                     {splitResult.members.map((member) => (
                       <div
                         key={member.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-3 text-sm"
+                        className="flex flex-col items-start justify-between gap-2 rounded-lg bg-white p-3 text-sm sm:flex-row sm:items-center"
                       >
                         <span>{member.name}</span>
 
@@ -908,9 +861,7 @@ export default function GroupDetailPage() {
                           </p>
                           <p className="text-xs text-slate-500">
                             Fair share:{" "}
-                            {formatRupees(
-                              member.fairSharePaise / 100,
-                            )}
+                            {formatRupees(member.fairSharePaise / 100)}
                           </p>
                         </div>
                       </div>
@@ -930,7 +881,7 @@ export default function GroupDetailPage() {
                       {splitResult.transfers.map((transfer, index) => (
                         <div
                           key={`${transfer.from}-${transfer.to}-${index}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-3 text-sm"
+                          className="flex flex-col items-start justify-between gap-2 rounded-lg bg-white p-3 text-sm sm:flex-row sm:items-center"
                         >
                           <span>
                             <strong>{transfer.from}</strong>
@@ -956,10 +907,7 @@ export default function GroupDetailPage() {
 
             {filteredExpenses.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 px-4 py-12 text-center">
-                <Receipt
-                  className="mx-auto mb-3 text-slate-400"
-                  size={30}
-                />
+                <Receipt className="mx-auto mb-3 text-slate-400" size={30} />
 
                 <p className="font-semibold text-slate-700">
                   {expenses.length === 0
@@ -978,11 +926,11 @@ export default function GroupDetailPage() {
                 {filteredExpenses.map((expense) => (
                   <article
                     key={expense._id}
-                    className="rounded-xl border border-slate-200 p-4 transition hover:border-indigo-200"
+                    className="min-w-0 rounded-xl border border-slate-200 p-3 transition hover:border-emerald-200 sm:p-4"
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
                       <div className="min-w-0">
-                        <h3 className="break-words font-semibold text-slate-800">
+                        <h3 className="wrap-break-word font-semibold text-slate-800">
                           {expense.title}
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
@@ -990,7 +938,7 @@ export default function GroupDetailPage() {
                         </p>
                       </div>
 
-                      <p className="shrink-0 font-bold text-slate-900">
+                      <p className="max-w-[45%] shrink-0 wrap-break-word text-right text-sm font-bold text-slate-900 sm:max-w-none sm:text-base">
                         {formatMoney(getExpenseAmount(expense))}
                       </p>
                     </div>
@@ -1053,14 +1001,11 @@ export default function GroupDetailPage() {
               Add expenses to see your monthly spending trend.
             </p>
           ) : (
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-6 sm:gap-5">
+            <div className="grid grid-cols-6 gap-1.5 sm:gap-5">
               {monthlyTrend.map((month) => {
                 const barHeight =
                   month.amount > 0
-                    ? Math.max(
-                        8,
-                        (month.amount / maxMonthlyAmount) * 150,
-                      )
+                    ? Math.max(8, (month.amount / maxMonthlyAmount) * 150)
                     : 3;
 
                 return (
@@ -1068,18 +1013,14 @@ export default function GroupDetailPage() {
                     key={month.key}
                     className="flex min-w-0 flex-col items-center"
                   >
-                    <p className="mb-2 min-h-8 text-center text-xs font-semibold text-slate-700">
-                      {month.amount > 0
-                        ? formatRupees(month.amount)
-                        : "—"}
+                    <p className="mb-2 min-h-8 w-full truncate text-center text-[10px] font-semibold text-slate-700 sm:text-xs">
+                      {month.amount > 0 ? formatRupees(month.amount) : "—"}
                     </p>
 
-                    <div className="flex h-40 w-full items-end justify-center rounded-xl bg-slate-50 px-2 pb-2">
+                    <div className="flex h-32 w-full items-end justify-center rounded-xl bg-slate-50 px-1.5 pb-2 sm:h-40 sm:px-2">
                       <div
                         className={`w-full max-w-12 rounded-t-lg transition-all ${
-                          month.amount > 0
-                            ? "bg-violet-500"
-                            : "bg-slate-200"
+                          month.amount > 0 ? "bg-emerald-500" : "bg-slate-200"
                         }`}
                         style={{ height: `${barHeight}px` }}
                         role="img"
@@ -1088,7 +1029,7 @@ export default function GroupDetailPage() {
                       />
                     </div>
 
-                    <p className="mt-2 text-xs font-medium text-slate-500">
+                    <p className="mt-2 text-[10px] font-medium text-slate-500 sm:text-xs">
                       {month.label}
                     </p>
                   </div>
@@ -1100,16 +1041,14 @@ export default function GroupDetailPage() {
 
         {/* Category breakdown and roommate spending */}
         <section className="mt-6 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="mb-5 flex items-center gap-3">
               <div className="rounded-xl bg-indigo-50 p-2.5 text-indigo-600">
                 <PieChart size={21} />
               </div>
 
               <div>
-                <h2 className="text-lg font-bold">
-                  Category breakdown
-                </h2>
+                <h2 className="text-lg font-bold">Category breakdown</h2>
                 <p className="text-sm text-slate-500">
                   Where your household money goes
                 </p>
@@ -1124,12 +1063,12 @@ export default function GroupDetailPage() {
               <div className="space-y-5">
                 {categoryEntries.map(([expenseCategory, value]) => (
                   <div key={expenseCategory}>
-                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                      <span className="font-medium text-slate-700">
+                    <div className="mb-2 flex items-start justify-between gap-2 text-sm">
+                      <span className="min-w-0 wrap-break-word font-medium text-slate-700">
                         {expenseCategory}
                       </span>
 
-                      <span className="font-semibold text-slate-900">
+                      <span className="shrink-0 wrap-break-word text-right font-semibold text-slate-900">
                         {formatRupees(value)}
                       </span>
                     </div>
@@ -1158,16 +1097,14 @@ export default function GroupDetailPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="mb-5 flex items-center gap-3">
               <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-600">
                 <BarChart3 size={21} />
               </div>
 
               <div>
-                <h2 className="text-lg font-bold">
-                  Roommate spending
-                </h2>
+                <h2 className="text-lg font-bold">Roommate spending</h2>
                 <p className="text-sm text-slate-500">
                   Total expenses paid by each roommate
                 </p>
@@ -1182,12 +1119,12 @@ export default function GroupDetailPage() {
               <div className="space-y-5">
                 {roommateEntries.map(([roommateName, value]) => (
                   <div key={roommateName}>
-                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                      <span className="font-medium text-slate-700">
+                    <div className="mb-2 flex items-start justify-between gap-2 text-sm">
+                      <span className="min-w-0 wrap-break-word font-medium text-slate-700">
                         {roommateName}
                       </span>
 
-                      <span className="font-semibold text-slate-900">
+                      <span className="shrink-0 wrap-break-word text-right font-semibold text-slate-900">
                         {formatRupees(value)}
                       </span>
                     </div>
