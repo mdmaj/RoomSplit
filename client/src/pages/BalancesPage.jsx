@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   Wallet,
 } from "lucide-react";
 import api from "../services/api.js";
+import { loadDashboardPage, loadGroupDetailPage } from "../routeLoaders.js";
 
 function memberId(member) {
   const person = member?.user ?? member;
@@ -56,6 +57,7 @@ function normalizeBalance(raw) {
 
 export default function BalancesPage() {
   const { groupId } = useParams();
+  const location = useLocation();
 
   const [group, setGroup] = useState(null);
   const [balances, setBalances] = useState([]);
@@ -80,16 +82,20 @@ export default function BalancesPage() {
     setError("");
 
     try {
+      const groupFromNavigation =
+        location.state?.group?._id === groupId ? location.state.group : null;
       const [groupsRes, balancesRes, settlementsRes] = await Promise.all([
-        api.get("/groups"),
+        groupFromNavigation ? Promise.resolve(null) : api.get("/groups"),
         api.get(`/balances/groups/${groupId}`),
         api.get(`/balances/groups/${groupId}/settlements`),
       ]);
 
-      const groupList = groupsRes.data.groups ?? groupsRes.data;
+      const groupList = groupsRes
+        ? groupsRes.data.groups ?? groupsRes.data
+        : null;
       const selectedGroup = Array.isArray(groupList)
         ? groupList.find((item) => item._id === groupId)
-        : null;
+        : groupFromNavigation;
 
       if (!selectedGroup) {
         setGroup(null);
@@ -132,7 +138,7 @@ export default function BalancesPage() {
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, location.state]);
 
   useEffect(() => {
     // The async request updates local state when the external data arrives.
@@ -191,7 +197,12 @@ export default function BalancesPage() {
       <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
         <div className="mx-auto max-w-3xl rounded-2xl bg-white p-4 sm:p-6">
           <p className="text-red-600">{error || "Group nahi mila."}</p>
-          <Link to="/dashboard" className="mt-4 inline-block text-indigo-600">
+          <Link
+            to="/dashboard"
+            onMouseEnter={loadDashboardPage}
+            onFocus={loadDashboardPage}
+            className="mt-4 inline-block text-indigo-600"
+          >
             Back to dashboard
           </Link>
         </div>
@@ -205,6 +216,9 @@ export default function BalancesPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
           <Link
             to={`/groups/${groupId}`}
+            state={{ group }}
+            onMouseEnter={loadGroupDetailPage}
+            onFocus={loadGroupDetailPage}
             className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-indigo-600"
           >
             <ArrowLeft size={18} />

@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+:root {
+  --netflix-black: #1a1919;
+  --netflix-surface: #101010;
+  --netflix-surface-raised: #232323;
+  --netflix-input: #333333;
+  --netflix-border: #383838;
+  --netflix-text: #ffffff;
+  --netflix-muted: #a3a3a3;
+  --netflix-red: #b20710;
+  --netflix-red-hover: #801016;
+  --netflix-red-dark: #b20710;
+  --netflix-gold: #f5c518;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -7,6 +21,196 @@
 body {
   margin: 0;
   font-family: Inter, system-ui, sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--netflix-black);
+  color: var(--netflix-text);
+}
+
+/* Keep the existing Tailwind layout intact while applying the shared theme. */
+.bg-slate-50,
+.bg-slate-100 {
+  background-color: var(--netflix-black);
+}
+
+.bg-white,
+.bg-white\/95 {
+  background-color: var(--netflix-surface);
+}
+
+.bg-white\/95 {
+  background-color: rgb(20 20 20 / 0.96);
+}
+
+.border-slate-100,
+.border-slate-200,
+.border-slate-300,
+.border-white\/80 {
+  border-color: var(--netflix-border);
+}
+
+.text-slate-900,
+.text-slate-800,
+.text-slate-700 {
+  color: var(--netflix-text);
+}
+
+.text-slate-600,
+.text-slate-500,
+.text-slate-400 {
+  color: var(--netflix-muted);
+}
+
+.bg-slate-50\/95,
+.bg-slate-50\/50 {
+  background-color: color-mix(in srgb, var(--netflix-black) 95%, transparent);
+}
+
+.bg-emerald-50,
+.bg-blue-50,
+.bg-indigo-50,
+.bg-teal-50,
+.bg-violet-50 {
+  background-color: #2a1719;
+}
+
+.bg-emerald-600,
+.bg-emerald-500 {
+  background-color: var(--netflix-red);
+}
+
+.hover\:bg-emerald-700:hover,
+.hover\:bg-emerald-800:hover {
+  background-color: var(--netflix-red-hover);
+}
+
+.text-emerald-800,
+.text-emerald-700,
+.text-emerald-600,
+.text-emerald-500,
+.text-indigo-600,
+.text-indigo-500,
+.text-blue-700,
+.text-violet-600 {
+  color: var(--netflix-red);
+}
+
+.text-emerald-50 {
+  color: var(--netflix-text);
+}
+
+.hover\:text-emerald-700:hover,
+.hover\:text-emerald-800:hover,
+.hover\:text-indigo-600:hover {
+  color: var(--netflix-red-dark);
+}
+
+.border-emerald-100,
+.border-emerald-200,
+.border-emerald-300 {
+  border-color: color-mix(in srgb, var(--netflix-red) 55%, var(--netflix-border));
+}
+
+.border-emerald-600,
+.border-emerald-500 {
+  border-color: var(--netflix-red);
+}
+
+.focus\:border-emerald-600:focus,
+.focus\:border-emerald-500:focus {
+  border-color: var(--netflix-red);
+}
+
+.focus\:ring-emerald-100:focus {
+  --tw-ring-color: color-mix(in srgb, var(--netflix-red) 30%, transparent);
+}
+
+.bg-slate-100,
+.bg-slate-50\/80 {
+  background-color: var(--netflix-surface-raised);
+}
+
+.bg-slate-50\/95,
+.bg-slate-50\/50 {
+  background-color: rgb(20 20 20 / 0.96);
+}
+
+.hover\:bg-slate-50:hover,
+.hover\:bg-white:hover {
+  background-color: var(--netflix-surface-raised);
+}
+
+.bg-white input,
+.bg-white select,
+.bg-white textarea,
+input,
+select,
+textarea {
+  background-color: var(--netflix-input);
+  border-color: #4a4a4a;
+  color: var(--netflix-text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #8c8c8c;
+}
+
+.bg-white button:not(.bg-emerald-600),
+.bg-white\/95 button:not(.bg-emerald-600) {
+  color: var(--netflix-text);
+}
+
+.bg-red-50 {
+  background-color: #351719;
+}
+
+.text-red-700,
+.text-red-600 {
+  color: #ff7b82;
+}
+
+.border-red-200 {
+  border-color: #7d2a30;
+}
+
+.from-emerald-50,
+.from-teal-50 {
+  --tw-gradient-from: #241414 var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(36 20 20 / 0) var(--tw-gradient-to-position);
+}
+
+.from-emerald-600 {
+  --tw-gradient-from: var(--netflix-red) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(229 9 20 / 0) var(--tw-gradient-to-position);
+}
+
+.from-emerald-700 {
+  --tw-gradient-from: var(--netflix-red-dark) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(178 7 16 / 0) var(--tw-gradient-to-position);
+}
+
+.via-emerald-600 {
+  --tw-gradient-via: var(--netflix-red) var(--tw-gradient-via-position);
+}
+
+.via-slate-50 {
+  --tw-gradient-via: var(--netflix-black) var(--tw-gradient-via-position);
+  --tw-gradient-to: rgb(20 20 20 / 0) var(--tw-gradient-to-position);
+}
+
+.to-teal-600 {
+  --tw-gradient-to: #7f080e var(--tw-gradient-to-position);
+}
+
+.to-teal-50,
+.to-indigo-700 {
+  --tw-gradient-to: var(--netflix-black) var(--tw-gradient-to-position);
+}
+
+.shadow-emerald-900\/5,
+.shadow-emerald-900\/10 {
+  --tw-shadow-color: rgb(0 0 0 / 0.35);
+}
+
+.bg-indigo-500 {
+  background-color: var(--netflix-gold);
 }

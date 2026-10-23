@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  ArrowRight,
   Check,
-  Copy,
   Home,
   LogOut,
   Plus,
@@ -15,6 +13,8 @@ import {
 
 import { useAuth } from "../context/AuthContext.jsx";
 import api from "../services/api.js";
+import DashboardStatCard from "../components/DashboardStatCard.jsx";
+import GroupCard from "../components/GroupCard.jsx";
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -242,47 +242,24 @@ export default function DashboardPage() {
           aria-label="Dashboard overview"
           className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 lg:grid-cols-3"
         >
-          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:shadow-md sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <span className="min-w-0 text-xs font-medium leading-4 text-slate-500 sm:text-sm sm:leading-normal">
-                Your groups
-              </span>
-              <div className="hidden shrink-0 rounded-xl bg-emerald-50 p-2.5 text-emerald-700 sm:block">
-                <Home size={20} />
-              </div>
-            </div>
-            <p className="mt-3 text-2xl font-bold text-slate-900 sm:mt-4 sm:text-3xl">
-              {loading ? "—" : groups.length}
-            </p>
-            <p className="mt-1 truncate text-[11px] text-slate-500 sm:text-xs">
-              Households you belong to
-            </p>
-          </div>
-
-          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:shadow-md sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <span className="min-w-0 text-xs font-medium leading-4 text-slate-500 sm:text-sm sm:leading-normal">
-                Roommate memberships
-              </span>
-              <div className="hidden shrink-0 rounded-xl bg-blue-50 p-2.5 text-blue-700 sm:block">
-                <Users size={20} />
-              </div>
-            </div>
-            <p className="mt-3 text-2xl font-bold text-slate-900 sm:mt-4 sm:text-3xl">
-              {loading
-                ? "—"
-                : groups.reduce(
-                    (total, group) =>
-                      total +
-                      (Array.isArray(group.members) ? group.members.length : 0),
-                    0,
-                  )}
-            </p>
-            <p className="mt-1 truncate text-[11px] text-slate-500 sm:text-xs">
-              Total memberships across your households
-            </p>
-          </div>
-
+          <DashboardStatCard
+            label="Your groups"
+            value={groups.length}
+            description="Households you belong to"
+            icon={Home}
+            loading={loading}
+          />
+          <DashboardStatCard
+            label="Roommate memberships"
+            value={groups.reduce(
+              (total, group) =>
+                total + (Array.isArray(group.members) ? group.members.length : 0),
+              0,
+            )}
+            description="Total memberships across your households"
+            icon={Users}
+            loading={loading}
+          />
         </section>
 
         <section className="mt-8 sm:mt-10">
@@ -333,72 +310,14 @@ export default function DashboardPage() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3 mb-2">
               {groups.map((group) => (
-                <article
+                <GroupCard
                   key={group._id}
-                  className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:border-emerald-200 hover:shadow-lg hover:shadow-slate-900/5 sm:hover:-translate-y-1"
-                >
-                  <div className="p-4 sm:p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 sm:h-12 sm:w-12">
-                          <Home size={23} />
-                        </div>
-
-                        <div className="min-w-0">
-                          <h4 className="wrap-break-word font-bold text-slate-900">
-                            {group.name}
-                          </h4>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {group.members?.length ?? 0}{" "}
-                            {(group.members?.length ?? 0) === 1
-                              ? "member"
-                              : "members"}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {group.inviteCode && (
-                      <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-3">
-                        <p className="text-xs font-medium text-slate-500">
-                          Invite code
-                        </p>
-
-                        <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
-                          <code className="min-w-0 break-all text-sm font-bold tracking-wider text-slate-800">
-                            {group.inviteCode}
-                          </code>
-
-                          <button
-                            type="button"
-                            onClick={() => handleCopyCode(group.inviteCode)}
-                            className="shrink-0 rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-emerald-50 hover:text-emerald-700"
-                            aria-label={`Copy invite code for ${group.name}`}
-                            title="Copy invite code"
-                          >
-                            {copiedCode === group.inviteCode ? (
-                              <Check size={16} />
-                            ) : (
-                              <Copy size={16} />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="border-t border-slate-100 px-4 py-3 sm:px-5">
-                    <Link
-                      to={`/groups/${group._id}`}
-                      className="flex min-h-8 items-center justify-between gap-2 text-sm font-semibold text-emerald-700 hover:text-emerald-800"
-                    >
-                      <span>Open household</span>
-                      <ArrowRight size={17} className="shrink-0" />
-                    </Link>
-                  </div>
-                </article>
+                  group={group}
+                  copiedCode={copiedCode}
+                  onCopy={handleCopyCode}
+                />
               ))}
             </div>
           )}

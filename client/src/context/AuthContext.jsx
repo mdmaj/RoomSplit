@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import api from "../services/api.js";
@@ -26,37 +27,41 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    refreshUser();
+    void Promise.resolve().then(refreshUser);
   }, [refreshUser]);
 
   
-const login = async (email, password) => {
-  const response = await api.post("/auth/login", { email, password });
-  setUser(response.data.user);
-  return response.data;
-};
+  const login = useCallback(async (email, password) => {
+    const response = await api.post("/auth/login", { email, password });
+    setUser(response.data.user);
+    return response.data;
+  }, []);
 
-const register = async (name, email, password) => {
-  const response = await api.post("/auth/register", {
-    name,
-    email,
-    password,
-  });
-  setUser(response.data.user);
-  return response.data;
-};
-  const logout = async () => {
+  const register = useCallback(async (name, email, password) => {
+    const response = await api.post("/auth/register", {
+      name,
+      email,
+      password,
+    });
+    setUser(response.data.user);
+    return response.data;
+  }, []);
+
+  const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
     } finally {
       setUser(null);
     }
-  };
+  }, []);
+
+  const authValue = useMemo(
+    () => ({ user, loading, login, register, logout, refreshUser }),
+    [user, loading, login, register, logout, refreshUser],
+  );
 
   return (
-    <AuthContext.Provider
-      value={{ user, loading, login, register, logout, refreshUser }}
-    >
+    <AuthContext.Provider value={authValue}>
       {children}
     </AuthContext.Provider>
   );

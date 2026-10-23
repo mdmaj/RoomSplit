@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import {
   ArrowLeft,
@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 import api from "../services/api.js";
+import { loadBalancesPage, loadDashboardPage } from "../routeLoaders.js";
+import MonthlySpendingPieChart from "../components/MonthlySpendingPieChart.jsx";
 
 const categories = [
   "Rent",
@@ -177,6 +179,7 @@ function calculateSuggestedTransfers(members, expenses) {
 
 export default function GroupDetailPage() {
   const { groupId } = useParams();
+  const location = useLocation();
   const { user } = useAuth();
 
   const [group, setGroup] = useState(null);
@@ -225,16 +228,22 @@ export default function GroupDetailPage() {
     setError("");
 
     try {
+      const groupFromNavigation =
+        location.state?.group?._id === groupId ? location.state.group : null;
       const [groupsResponse, expensesResponse] = await Promise.all([
-        api.get("/groups"),
+        groupFromNavigation ? Promise.resolve(null) : api.get("/groups"),
         api.get(`/expenses/groups/${groupId}`),
       ]);
 
-      const groupsData = groupsResponse.data.groups ?? groupsResponse.data;
-
-      const foundGroup = Array.isArray(groupsData)
-        ? groupsData.find((item) => item._id === groupId)
+      const groupsData = groupsResponse
+        ? groupsResponse.data.groups ?? groupsResponse.data
         : null;
+
+      const foundGroup =
+        groupFromNavigation ||
+        (Array.isArray(groupsData)
+          ? groupsData.find((item) => item._id === groupId)
+          : null);
 
       if (!foundGroup) {
         setGroup(null);
@@ -274,7 +283,7 @@ export default function GroupDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [groupId, user]);
+  }, [groupId, location.state, user]);
 
   useEffect(() => {
     // The async request updates local state when the external data arrives.
@@ -471,11 +480,6 @@ export default function GroupDetailPage() {
     }));
   }, [expenses]);
 
-  const maxMonthlyAmount = Math.max(
-    1,
-    ...monthlyTrend.map((month) => month.amount),
-  );
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600">
@@ -493,6 +497,8 @@ export default function GroupDetailPage() {
 
           <Link
             to="/dashboard"
+            onMouseEnter={loadDashboardPage}
+            onFocus={loadDashboardPage}
             className="mt-4 inline-flex items-center gap-2 font-semibold text-indigo-600"
           >
             <ArrowLeft size={17} />
@@ -509,6 +515,8 @@ export default function GroupDetailPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
           <Link
             to="/dashboard"
+            onMouseEnter={loadDashboardPage}
+            onFocus={loadDashboardPage}
             className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-indigo-600"
           >
             <ArrowLeft size={18} />
@@ -544,6 +552,9 @@ export default function GroupDetailPage() {
               <div className="mt-5 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:gap-3">
                 <Link
                   to={`/groups/${groupId}/balances`}
+                  state={{ group }}
+                  onMouseEnter={loadBalancesPage}
+                  onFocus={loadBalancesPage}
                   className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-50 sm:w-auto sm:text-base"
                 >
                   <Wallet size={18} />
@@ -985,65 +996,34 @@ export default function GroupDetailPage() {
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="rounded-xl bg-violet-50 p-2.5 text-violet-600">
+              <div className="rounded-xl bg-violet-50 p-2.5 ">
                 <BarChart3 size={21} />
               </div>
 
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
+                <h2 className="text-lg font-bold ">
                   Monthly spending trend
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm ">
                   Total household expenses over the last six months
                 </p>
               </div>
             </div>
 
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium ">
               All expenses
             </span>
           </div>
 
           {expenses.length === 0 ? (
-            <p className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            <p className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm">
               Add expenses to see your monthly spending trend.
             </p>
           ) : (
-            <div className="grid grid-cols-6 gap-1.5 sm:gap-5">
-              {monthlyTrend.map((month) => {
-                const barHeight =
-                  month.amount > 0
-                    ? Math.max(8, (month.amount / maxMonthlyAmount) * 150)
-                    : 3;
-
-                return (
-                  <div
-                    key={month.key}
-                    className="flex min-w-0 flex-col items-center"
-                  >
-                    <p className="mb-2 min-h-8 w-full truncate text-center text-[10px] font-semibold text-slate-700 sm:text-xs">
-                      {month.amount > 0 ? formatRupees(month.amount) : "—"}
-                    </p>
-
-                    <div className="flex h-32 w-full items-end justify-center rounded-xl bg-slate-50 px-1.5 pb-2 sm:h-40 sm:px-2">
-                      <div
-                        className={`w-full max-w-12 rounded-t-lg transition-all ${
-                          month.amount > 0 ? "bg-emerald-500" : "bg-slate-200"
-                        }`}
-                        style={{ height: `${barHeight}px` }}
-                        role="img"
-                        aria-label={`${month.label}: ${formatRupees(month.amount)}`}
-                        title={`${month.label}: ${formatRupees(month.amount)}`}
-                      />
-                    </div>
-
-                    <p className="mt-2 text-[10px] font-medium text-slate-500 sm:text-xs">
-                      {month.label}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+            <MonthlySpendingPieChart
+              months={monthlyTrend}
+              formatMoney={formatRupees}
+            />
           )}
         </section>
 
