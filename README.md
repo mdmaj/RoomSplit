@@ -22,7 +22,11 @@ The application is designed for desktop and mobile screens, with compact dashboa
 * View monthly spending trends and category breakdowns
 * Export expense reports to Excel
 * Responsive mobile-first dashboard, household, expense, and settlement screens
-* Emerald/teal visual theme with touch-friendly form controls
+* Redesigned emerald/teal interface with clear visual hierarchy and touch-friendly form controls
+* Dashboard summary cards for household totals, memberships, and recent activity
+* Reusable household cards and create/join household forms
+* Monthly spending and category visualizations for faster expense analysis
+* Route-aware loading states while authentication and household data are retrieved
 
 ## Tech Stack
 
@@ -35,6 +39,8 @@ The application is designed for desktop and mobile screens, with compact dashboa
 * React Router
 * Recharts
 * Lucide React
+
+The frontend uses reusable components for dashboard statistics, household lists and cards, household forms, and spending visualizations. Protected routes restore the authenticated session before rendering application pages.
 
 **Backend**
 
@@ -66,9 +72,10 @@ RoomSplit/
 │       └── server.js
 ├── client/
 │   └── src/
-│       ├── components/      # Shared UI components
-│       ├── context/         # Authentication state
-│       ├── pages/           # Dashboard, groups, expenses, and balances
+│       ├── components/      # Shared dashboard, household, and chart components
+│       ├── context/         # Authentication state and session restoration
+│       ├── pages/           # Authentication, dashboard, household, and balance screens
+│       ├── routeLoaders.js  # Protected-route data loading
 │       └── services/        # Axios API client
 └── README.md
 ```
